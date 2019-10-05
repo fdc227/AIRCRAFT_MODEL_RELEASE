@@ -47,7 +47,7 @@ psi_dt_dt = symbols('psi_dt_dt')
 X_dt_dt = symbols('X_dt_dt')
 Y_dt_dt = symbols('Y_dt_dt')
 Z_dt_dt = symbols('Z_dt_dt')
-short_var_list_dt_dt = [X_dt_dt, Y_dt_dt, Z_dt_dt]
+short_var_list_dt_dt = [theta_dt_dt, phi_dt_dt, psi_dt_dt, X_dt_dt, Y_dt_dt, Z_dt_dt]
 
 var_q_bending = []
 for i in range(np, 0, -1):
@@ -202,12 +202,22 @@ print(len(T))
 
 def linearcoeff(i):
     output = linear_coeffs(T[i], *q_list_dt_dt)
-    print(f'Now finished calculating {i+1}/26 th row')
+    print(f'Now finished calculating {i+1}/{len(q_list_dt_dt)} th row')
     return output
 
-R = [i for i in range(26)]
-p = Pool(26)
+R = [i for i in range(len(q_list_dt_dt))]
+p = Pool(num_of_processes)
 Linear_coefficients = p.map(linearcoeff, R)
+A = []
+b = []
+for term in Linear_coefficients:
+    A.append(term[0:len(q_list_dt_dt)])
+    b.append([term[-1]])
+
+A_raw = open('A.pkl','wb')
+b_raw = open('b.pkl','wb')
+pickle.dump(A, A_raw)
+pickle.dump(b, b_raw)
 
 
 

@@ -1,16 +1,15 @@
-from sympy import *
-from sympy.parsing.sympy_parser import parse_expr
-from sympy.solvers.solveset import linear_coeffs
-from pathos.multiprocessing import ProcessingPool as Pool
-from sympylist_to_txt import sympylist_to_txt
-from iseven import iseven
 import pickle
+from sympy import *
+from sympy.printing.ccode import C99CodePrinter
+from sympy.printing.codeprinter import Assignment
+from iseven import iseven
 import sys
 
 print(sys.argv[1])
 print(sys.argv[2])
 num_of_elements, num_of_processes = int(sys.argv[1]), int(sys.argv[2])
-
+# num_of_elements = total number of finite element sections on two beams
+# num_of_processes = number of processes of CPU processes for the function, multiprocessing is assumed
 if not iseven(num_of_elements):
     raise Exception ("Number of finite beam elements must be even")
 else:
@@ -24,6 +23,7 @@ rho, V, a_w, gamma, M_thetadot, e = symbols('rho, V, a_w, gamma, M_thetadot, e')
 beta, P, Q, R = symbols('beta, P, Q, R')
 W_x, W_y, W_z = symbols('W_x, W_y, W_z')
 P_s, gamma_alpha = symbols('P_s, gamma_alpha')
+A = symbols('A')
 
 theta = symbols('theta')
 phi = symbols('phi')
@@ -185,56 +185,43 @@ q_list = [*short_var_list, *var_q_list]
 q_list_dt = [*short_var_list_dt, *var_q_list_dt]
 q_list_dt_dt = [*short_var_list_dt_dt, *var_q_list_dt_dt]
 
-###############################################################
-################### Actual Program ############################
-###############################################################
+y_sym = [*q_list, *q_list_dt]
+str1_list = []
+for i in range(len(y_sym)):
+    str1_list.append('double ' + str(y_sym[i]) + '=' + f'state_var[{i}];')
+str1 = '\n'.join(str1_list)
+print('str1 generated')
 
-T_raw = open('T_final.pkl', 'rb')
-T = pickle.load(T_raw)
-# T = T_.tolist()
-# sympylist_to_txt(T, 'T_final.txt')
+T_raw = open('T_dt_dt.pkl', 'rb')
+T_dt_dt = Matrix(pickle.load(T_raw))
 
-print(len(T))
-
-# T_expanded = []
-# for row in T:
-#     T_expanded.append(row.expand())
-
-def linearcoeff(i):
-    output = linear_coeffs(T[i], *q_list_dt_dt)
-    print(f'Now finished calculating {i+1}/{len(q_list_dt_dt)} th row')
-    return output
-
-R = [i for i in range(len(q_list_dt_dt))]
-p = Pool(num_of_processes)
-Linear_coefficients = p.map(linearcoeff, R)
-A = []
-b = []
-for term in Linear_coefficients:
-    A.append(term[0:len(q_list_dt_dt)])
-    b.append([term[-1]])
-
-A_raw = open('T_dt_dt.pkl','wb')
-b_raw = open('T_others.pkl','wb')
-pickle.dump(A, A_raw)
-pickle.dump(b, b_raw)
+class CMatrixPrinter(C99CodePrinter):
+    def _print_ImmutableDenseMatrix(self, expr):
+        sub_exprs, simplified = cse(expr)
+        lines = []
+        for var, sub_expr in sub_exprs:
+            lines.append('double ' + self._print(Assignment(var, sub_expr)))
+        M = MatrixSymbol('T_dt_dt', len(q_list_dt_dt), len(q_list_dt_dt))
+        return '\n'.join(lines) + '\n' + self._print(Assignment(M, simplified[0]))
 
 
 
-# print(linear_coeffs(T[0], *q_list_dt_dt))
+p = CMatrixPrinter()
+str2 = p.doprint(T_dt_dt)
+print('str2 generated')
 
-# A_, b_ = linear_eq_to_matrix(T_expanded, q_list_dt_dt)
-# A = A_.tolist()
-# b = b_.tolist()
-# print('finished seperation of variables')
+str3 = str1 + '\n' + str2
+str0 = '#include <iostream>'+'\n'+'#include <cmath>'+'\n'+'#include "parameters.h"'+'\n'+'\n'+'void T_dt_dt_f(double* state_var, double* T_dt_dt)'+'\n'+'{\n'
+str_end = '\n}'
 
-# T_dt_dt_raw = open('T_dt_dt.pkl', 'wb')
-# pickle.dump(A, T_dt_dt_raw)
-# print('finished generating T_dt_dt')
+str_final = str0 + str3 + str_end
 
-# T_others = open('T_others.pkl', 'wb')
-# pickle.dump(b, T_others)
-# print('finsihed generating T_others')
 
-# sympylist_to_txt(A, 'T_dt_dt.txt')
-# sympylist_to_txt(b, 'T_others.txt')
+T_c = open('T_dt_dt_c.cpp', 'w')
+T_c.write(str_final)
+T_c.close()
+
+
+
+
+

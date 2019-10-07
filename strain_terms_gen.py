@@ -2,12 +2,11 @@ import sys
 from sympy import *
 from shape_gen import shape_gen
 from torsion_shape_gen import torsion_shape_gen
-from cross_product import Cross
-from dot_product import Dot
 import numpy as np
 from pathos.multiprocessing import ProcessingPool as Pool
 from sympylist_to_txt import sympylist_to_txt
 import pickle
+from iseven import iseven
 
 print(sys.argv[1])
 print(sys.argv[2])
@@ -27,6 +26,7 @@ rho, V, a_w, gamma, M_thetadot, e = symbols('rho, V, a_w, gamma, M_thetadot, e')
 beta, P, Q, R = symbols('beta, P, Q, R')
 W_x, W_y, W_z = symbols('W_x, W_y, W_z')
 P_s, gamma_alpha = symbols('P_s, gamma_alpha')
+A = symbols('A')
 
 theta = symbols('theta')
 phi = symbols('phi')
@@ -194,6 +194,14 @@ for i in range(len(var_q_list)):
     q_sub_dict[diff(diff(var_q_list[i], t), t)] = var_q_list_dt_dt[i]
 
 
+shape_func = shape_gen(4)
+shape_func = [i.subs({x:y}) for i in shape_func]
+S1, S2, S3, S4 = shape_func[0], shape_func[1], shape_func[2], shape_func[3]
+S5_tilde, S6_tilde = torsion_shape_gen()
+torsion_shape = [S5_tilde, S6_tilde]
+S5 = S5_tilde * (x - x_f)
+S6 = S6_tilde * (x - x_f)
+
 ###########################################
 ###### Combine var with shape_func ########
 ###########################################
@@ -233,6 +241,7 @@ W_variables = [*short_var_list, *var_q_list]
 
 
 def strain_terms(i):
+    print(f'Now starting {i+1}/{num_of_elements}th term')
     bs = bending_shape_func[i]
     tst = torsion_shape_tilde_func[i]
     ips = inplane_shape_func[i]
@@ -248,15 +257,17 @@ def strain_terms(i):
     
     return strain_var_each
 
-R = [i for i in range(6)]
-strain_arrays = []
-for i in R:
-    strain_arrays.append(strain_terms(i))
+R = [i for i in range(num_of_elements)]
+p = Pool(num_of_processes)
+strain_arrays = p.map(strain_terms, R)
+# strain_arrays = []
+# for i in R:
+#     strain_arrays.append(strain_terms(i))
 
 strain_terms_final = []
-for j in range(36):
+for j in range(len(W_variables)):
     local_sum = 0
-    for i in range(6):
+    for i in range(num_of_elements):
         local_sum += strain_arrays[i][j]
     strain_terms_final.append(local_sum)
 
